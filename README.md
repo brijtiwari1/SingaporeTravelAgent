@@ -1,229 +1,517 @@
-# Singapore Travel Planning Assistant
+# 🌏 Singapore AI Travel Planning Assistant
 
-An AI travel-planning assistant for the assignment: **RAG for stable destination knowledge + MCP tools for current weather and currency**.
+An AI-powered Singapore travel assistant built using **Streamlit, LangChain, Google Gemini, RAG, ChromaDB, and MCP tools**.
 
-## Architecture
+The application provides Singapore travel information from a curated knowledge base and uses MCP tools for **live weather forecasts and currency conversion**.
+
+---
+
+## 1. Features
+
+* Singapore attractions and neighbourhood recommendations
+* Transportation and practical travel information
+* Food and local experiences
+* Indoor and outdoor activity suggestions
+* Multi-day itinerary planning
+* Semantic search using RAG
+* Source references for retrieved travel information
+* Live weather forecast using MCP
+* Currency conversion using MCP
+* Weather-aware itinerary adjustment
+* Multi-turn conversation support
+* Graceful handling of tool/service failures
+
+---
+
+## 2. Architecture
 
 ```text
+User
+  │
+  ▼
 Streamlit UI
-    |
-    v
-LangChain Agent
-    |
-    +--> search_travel_knowledge --> Chroma --> Singapore KB
-    |
-    +--> get_weather_forecast --> Weather MCP --> Open-Meteo
-    |
-    +--> convert_currency --> Currency MCP --> Frankfurter
-    |
-    v
-LLM response with sources + MCP/tool information
+  │
+  ▼
+LangChain Agent + Google Gemini
+  │
+  ├──────────────► RAG
+  │                 │
+  │                 ▼
+  │          Chroma Vector Store
+  │                 │
+  │                 ▼
+  │        Singapore Knowledge Base
+  │
+  ├──────────────► Weather MCP
+  │                 │
+  │                 ▼
+  │             Open-Meteo
+  │
+  └──────────────► Currency MCP
+                    │
+                    ▼
+                 Frankfurter
+  │
+  ▼
+Final Travel Response
 ```
 
-LangChain's current `create_agent` supports tool-using agents, and `langchain-mcp-adapters` loads MCP tools into LangChain agents. The MCP Python SDK supports standard transports including stdio and Streamable HTTP.
+---
 
-## Why MCP is used
+## 3. Technology Stack
 
-Weather and exchange rates are time-sensitive, so they are retrieved at request time through MCP tools. Destination facts are kept in the local knowledge base and retrieved with semantic search. The LLM is instructed not to invent either source.
+| Component       | Technology                         |
+| --------------- | ---------------------------------- |
+| UI              | Streamlit                          |
+| LLM             | Google Gemini                      |
+| Agent Framework | LangChain                          |
+| RAG             | LangChain + ChromaDB               |
+| Embeddings      | Hugging Face Sentence Transformers |
+| Weather         | MCP + Open-Meteo                   |
+| Currency        | MCP + Frankfurter                  |
+| Language        | Python                             |
+| Conversation    | Streamlit Session State            |
 
-## Project structure
+---
+
+## 4. Project Structure
 
 ```text
 singapore-travel-assistant/
+│
 ├── app.py
 ├── requirements.txt
+├── .env
 ├── .env.example
 ├── .gitignore
 ├── README.md
+│
 ├── data/
 │   └── singapore/
 │       ├── wikivoyage.md
 │       ├── visit_singapore_essentials.md
 │       ├── visit_singapore_itinerary.md
 │       └── visit_singapore_plan.md
+│
 ├── rag/
+│   ├── __init__.py
 │   ├── ingest.py
 │   └── retriever.py
+│
 ├── mcp_servers/
 │   ├── weather_server.py
 │   └── currency_server.py
+│
 ├── services/
+│   ├── __init__.py
 │   └── travel_agent.py
+│
+├── test/
+│   ├── test_mcp_weather.py
+│   └── test_mcp_currency.py
+│
 └── vectorstore/
 ```
 
-## 1. Prerequisites
+---
 
-Recommended for Windows: **Python 3.11 or 3.12**. Avoid using Python 3.14 for this project if possible because the ML/LLM ecosystem can lag behind the newest Python release.
+## 5. Knowledge Base and RAG
 
-You need an OpenAI API key for the sample implementation. Put it in `.env`; never commit `.env`.
+The project contains curated Singapore travel information from multiple sources, including:
 
-## 2. Create the environment
+* Visit Singapore – Essential Singapore Travel Information
+* Visit Singapore – Plan Your Trip
+* Visit Singapore – 7 Days in Singapore Itinerary
+* Wikivoyage Singapore Travel Guide
 
-PowerShell:
+The RAG pipeline works as follows:
+
+```text
+Markdown Documents
+       ↓
+Document Chunking
+       ↓
+Hugging Face Embeddings
+       ↓
+ChromaDB
+       ↓
+Semantic Similarity Search
+       ↓
+Relevant Travel Context
+       ↓
+Gemini
+       ↓
+Final Answer
+```
+
+The `customerID`-style irrelevant metadata is not applicable here; only useful travel content and source metadata are stored.
+
+Each retrieved document contains source information so that the application can display the knowledge-base references used in the response.
+
+---
+
+## 6. MCP Tools
+
+### Weather MCP
+
+Tool:
+
+```text
+get_weather_forecast
+```
+
+The weather server uses **Open-Meteo** to retrieve current/future daily weather information.
+
+It provides:
+
+* Date
+* Maximum temperature
+* Minimum temperature
+* Rain probability
+* Rainfall
+* Weather code
+
+The MCP server is started automatically by the application.
+
+### Currency MCP
+
+Tool:
+
+```text
+convert_currency
+```
+
+The currency server uses **Frankfurter** to retrieve exchange-rate information.
+
+Example:
+
+```text
+Convert INR 50,000 to SGD
+```
+
+Example output:
+
+```text
+INR 50,000 is approximately SGD 670.39
+```
+
+---
+
+## 7. Agent and Prompt Strategy
+
+The LangChain agent decides which capability is required.
+
+### Stable travel information
+
+For questions such as:
+
+```text
+What are the must-visit attractions in Singapore?
+```
+
+the agent uses the RAG knowledge base.
+
+### Current information
+
+For questions such as:
+
+```text
+What is the weather in Singapore tomorrow?
+```
+
+the agent uses the Weather MCP tool.
+
+For:
+
+```text
+Convert INR 50,000 to SGD.
+```
+
+the agent uses the Currency MCP tool.
+
+### Combined scenario
+
+For:
+
+```text
+Create a 3-day Singapore itinerary for next week and adjust it according to the weather forecast.
+```
+
+the application combines:
+
+```text
+RAG
+ +
+Weather MCP
+ +
+Gemini
+```
+
+The knowledge base provides destination information while the weather MCP provides current/future forecast data. Gemini then creates a weather-aware itinerary.
+
+---
+
+## 8. Multi-Turn Conversation
+
+The application maintains conversation history using Streamlit session state.
+
+For example:
+
+```text
+User:
+Plan a 3-day Singapore trip.
+
+User:
+I am travelling with children.
+
+User:
+Make Day 2 more indoor.
+```
+
+The agent can use the previous conversation context when generating the next response.
+
+---
+
+## 9. Setup
+
+### Step 1 – Install dependencies
+
+Open PowerShell in the project folder:
 
 ```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-If PowerShell blocks activation, use Command Prompt:
+No virtual environment is required for this project.
 
-```cmd
-.venv\Scripts\activate
+### Step 2 – Configure Gemini
+
+Create a `.env` file:
+
+```env
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+GEMINI_MODEL=gemini-3.8-flash
 ```
 
-## 3. Configure the LLM
+Replace `YOUR_GEMINI_API_KEY` with your Google AI Studio API key.
 
-Copy `.env.example` to `.env`:
+---
 
-```text
-OPENAI_API_KEY=your_key_here
-OPENAI_MODEL=gpt-4.1-mini
-```
+## 10. Build the RAG Vector Store
 
-The project does not put the key in source code.
-
-## 4. Build the knowledge base
-
-The four files in `data/singapore` are starter metadata files. Replace their placeholder text with content that you are permitted to ingest/redistribute from the listed public sources. Keep the `# Title` and `Source URL:` lines because they become citation metadata.
-
-Then run:
+Run:
 
 ```powershell
-python rag/ingest.py
+python rag\ingest.py
 ```
 
-The script:
+This will:
 
-1. loads the Markdown files;
-2. creates meaningful overlapping chunks;
-3. creates normalized sentence-transformer embeddings;
-4. stores vectors in Chroma;
-5. preserves source title and URL metadata.
+1. Read the Singapore Markdown documents.
+2. Split them into chunks.
+3. Generate embeddings.
+4. Store the embeddings in ChromaDB.
 
-## 5. Run the application
+The generated vector store is stored in:
+
+```text
+vectorstore/
+```
+
+---
+
+## 11. Test MCP Servers
+
+### Weather MCP
+
+```powershell
+python test\test_mcp_weather.py
+```
+
+Expected result:
+
+```text
+Available tools:
+- get_weather_forecast
+
+"ok": true
+```
+
+### Currency MCP
+
+```powershell
+python test\test_mcp_currency.py
+```
+
+Expected result:
+
+```text
+Available tools:
+- convert_currency
+```
+
+The test should return a successful currency conversion.
+
+---
+
+## 12. Run the Application
+
+Start Streamlit:
 
 ```powershell
 streamlit run app.py
 ```
 
-Open the local Streamlit URL shown in the terminal.
+Open:
 
-## 6. Test the MCP servers independently
+```text
+http://localhost:8501
+```
 
-The MCP servers use stdio, so the LangChain MCP client starts them automatically. You normally do not need separate terminals.
+The application starts the MCP servers automatically when required, so the weather and currency servers do **not** need to be started manually.
 
-For debugging, the MCP Inspector can be used with the server scripts if your MCP CLI/Node environment is installed.
+---
 
-## 7. Required demo questions
+## 13. Demo Questions
 
-### RAG only
+Use the following questions during evaluation.
 
-> What are the must-visit attractions in Singapore?
+### RAG
 
-Expected behavior: the agent calls `search_travel_knowledge` and returns knowledge-base sources.
+```text
+What are the must-visit attractions in Singapore?
+```
 
-### Weather MCP only
+```text
+Which neighbourhoods are good for cultural experiences?
+```
 
-> What is the weather in Singapore tomorrow?
+```text
+How can I travel around Singapore?
+```
 
-Expected behavior: the agent calls `get_weather_forecast`. The answer should identify that the weather came from MCP/current data.
+### Weather MCP
 
-### Currency MCP only
+```text
+What is the weather in Singapore tomorrow?
+```
 
-> Convert INR 50,000 to SGD.
+### Currency MCP
 
-Expected behavior: the agent calls `convert_currency` and reports the returned rate/value and date when available.
+```text
+Convert INR 50,000 to SGD.
+```
 
 ### Combined RAG + MCP
 
-> Plan a three-day Singapore itinerary for next week and adjust the activities according to the weather forecast.
+```text
+Create a three-day Singapore itinerary for next week and adjust it according to the weather forecast.
+```
 
-Expected behavior:
+### Multi-Turn Conversation
 
-1. retrieve attractions, itinerary ideas, indoor/outdoor options and transport guidance from the KB;
-2. call the weather MCP tool;
-3. combine both sources;
-4. produce a day-by-day itinerary;
-5. replace or reorder outdoor activities when rain is forecast;
-6. identify KB sources and MCP usage.
+```text
+I am travelling with children. Make Day 2 more indoor.
+```
 
-### Multi-turn memory
+---
 
-> I am travelling to Singapore with my family.
+## 14. Failure Handling
 
-Then:
+The application includes basic error handling for external services.
 
-> Plan three days.
+Examples include:
 
-Then:
+* Invalid weather dates
+* Invalid forecast duration
+* Location not found
+* Weather API failure
+* Currency API failure
+* Missing knowledge base
+* Missing Gemini API key
+* MCP connection/tool errors
 
-> Make day 2 more indoor.
+Instead of silently producing fabricated live information, the application reports the service failure.
 
-The Streamlit app replays user/assistant history so the later questions retain the trip context.
+---
 
-## Prompt strategy
+## 15. Evaluation Mapping
 
-The system prompt separates three evidence types:
+| Requirement         | Implementation                        |
+| ------------------- | ------------------------------------- |
+| 3+ travel resources | 4 Singapore travel documents          |
+| Semantic retrieval  | Hugging Face embeddings + ChromaDB    |
+| Source references   | Source title and URL metadata         |
+| LLM                 | Google Gemini                         |
+| Agent framework     | LangChain                             |
+| Weather MCP         | `get_weather_forecast`                |
+| Currency MCP        | `convert_currency`                    |
+| Combined RAG + MCP  | Weather-aware itinerary               |
+| Multi-turn context  | Streamlit session state               |
+| Tool selection      | LangChain agent                       |
+| Failure handling    | Error handling in RAG/MCP/application |
+| User interface      | Streamlit                             |
 
-- **Knowledge base:** stable destination facts and source references.
-- **Current MCP information:** weather and currency returned at request time.
-- **AI recommendation:** the model's synthesis, prioritization and itinerary suggestions.
+---
 
-The prompt explicitly says to call the relevant source/tool, never fabricate missing facts, and report tool failures instead of inventing current values.
+## 16. End-to-End Example
 
-## Failure handling
+User:
 
-- Missing vector store: the application reports that `python rag/ingest.py` must be run.
-- Knowledge retrieval failure: the RAG tool returns a visible error rather than fake facts.
-- Weather API failure: the MCP tool returns `ok=false` and the agent is instructed to report that current weather could not be retrieved.
-- Currency API failure: same behavior; no exchange rate is invented.
+```text
+Create a 3-day Singapore itinerary for next week and adjust it according to weather forecast.
+```
 
-## Knowledge-base sources
+The application:
 
-1. Wikivoyage Singapore Travel Guide
-   https://en.wikivoyage.org/wiki/Singapore
-2. Visit Singapore - Essential Singapore Travel Information
-   https://www.visitsingapore.com/travel-tips/essential-travel-information/
-3. Visit Singapore - 7 Days in Singapore
-   https://www.visitsingapore.com/content/visitsingapore/en/travel-tips/travelling-to-singapore/itineraries/7-days-in-singapore
-4. Visit Singapore - Plan Your Trip
-   https://www.visitsingapore.com/mice/en/tools-and-resources/plan-your-trip/
+```text
+1. Understands the user's request
+          ↓
+2. Retrieves relevant Singapore travel information
+          ↓
+3. Calls Weather MCP
+          ↓
+4. Receives forecast data
+          ↓
+5. Gemini combines travel knowledge + weather
+          ↓
+6. Generates a 3-day itinerary
+          ↓
+7. Places outdoor activities on better-weather days
+          ↓
+8. Moves activities indoors when rain is expected
+          ↓
+9. Shows knowledge-base sources
+          ↓
+10. Shows MCP tools used
+```
 
-Review each source's current terms before redistributing copied content. For a submission repository, it is safer to include your own permitted extracts or clear instructions for obtaining the source material rather than committing material you are not licensed to redistribute.
+This demonstrates the main objective of the project: **combining RAG-based stable knowledge with MCP-based live information in an AI travel assistant.**
 
-## MCP tools
+---
 
-### Weather
+## 17. Submission
 
-`get_weather_forecast(location, start_date, days)` uses Open-Meteo forecast data through the weather MCP server.
+The project can be submitted as a Git repository containing:
 
-### Currency
+```text
+Source Code
+Knowledge Base
+RAG Pipeline
+MCP Servers
+Tests
+README
+Requirements
+Streamlit Application
+```
 
-`convert_currency(amount, from_currency, to_currency)` uses Frankfurter's latest exchange-rate endpoint through the currency MCP server.
+Before submission, verify:
 
-## Assignment acceptance mapping
+```powershell
+python rag\ingest.py
+python test\test_mcp_weather.py
+python test\test_mcp_currency.py
+streamlit run app.py
+```
 
-| Requirement | Implementation |
-|---|---|
-| 3+ travel resources | Four Singapore sources listed above |
-| Meaningful chunks | `RecursiveCharacterTextSplitter` |
-| Embeddings | `all-mpnet-base-v2` |
-| Vector store | Chroma |
-| Grounded answers | RAG tool + system prompt |
-| Source references | `source_title` and `source_url` metadata |
-| Weather MCP | `get_weather_forecast` |
-| Currency MCP | `convert_currency` |
-| Tool selection | LangChain agent |
-| Combined response | RAG + weather MCP |
-| Multi-turn context | Streamlit history replay |
-| Missing knowledge | Explicit prompt rule + retrieval errors |
-| MCP failures | `ok=false` tool results + no-fabrication rule |
-| UI | Streamlit |
-
-## Important implementation note
-
-The starter KB files intentionally do not reproduce third-party pages. Populate them with content you are allowed to use. This makes the repository safer to distribute and lets you document exactly what source material was ingested.
+Then demonstrate the RAG, Weather MCP, Currency MCP, combined itinerary, and multi-turn conversation scenarios.
